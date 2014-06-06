@@ -136,11 +136,11 @@ class TaggedItem(models.Model):
 
 class Bookmark(models.Model):
     url = models.URLField()
-    tags = generic.GenericRelation(TaggedItem, related_name='bookmarks')
+    tags = generic.GenericRelation(TaggedItem, related_query_name='bookmarks')
     favorite_tags = generic.GenericRelation(TaggedItem,
                                     content_type_field='favorite_ct',
                                     object_id_field='favorite_fkey',
-                                    related_name='favorite_bookmarks')
+                                    related_query_name='favorite_bookmarks')
 
 
 class Comment(models.Model):
