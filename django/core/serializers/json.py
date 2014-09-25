@@ -40,6 +40,7 @@ class Serializer(PythonSerializer):
             self.stream.write("\n")
 
     def end_object(self, obj):
+        self.naturalize_generics(obj)
         # self._current has the field data
         indent = self.options.get("indent")
         if not self.first:

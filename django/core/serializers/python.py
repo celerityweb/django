@@ -6,6 +6,8 @@ other serializers.
 from __future__ import unicode_literals
 
 from django.conf import settings
+from django.contrib.contenttypes.generic import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.serializers import base
 from django.db import models, DEFAULT_DB_ALIAS
 from django.utils.encoding import smart_text, is_protected_type
@@ -30,6 +32,7 @@ class Serializer(base.Serializer):
         self._current = {}
 
     def end_object(self, obj):
+        self.naturalize_generics(obj)
         self.objects.append(self.get_dump_object(obj))
         self._current = None
 
@@ -73,6 +76,19 @@ class Serializer(base.Serializer):
     def getvalue(self):
         return self.objects
 
+    def naturalize_generics(self, obj):
+        gfk_fields = [field for field in obj._meta.virtual_fields
+                      if isinstance(field, GenericForeignKey)]
+        if self.use_natural_keys:
+            for gfk_field in gfk_fields:
+                rel_obj = getattr(obj, gfk_field.name, None)
+                if rel_obj:
+                    ct_obj = getattr(obj, gfk_field.ct_field)
+                    if hasattr(ct_obj.model_class(), 'natural_key'):
+                        self._current[gfk_field.fk_field] = rel_obj.natural_key()
+
+
+
 
 def Deserializer(object_list, **options):
     """
@@ -91,6 +107,10 @@ def Deserializer(object_list, **options):
         data = {Model._meta.pk.attname: Model._meta.pk.to_python(d.get("pk", None))}
         m2m_data = {}
         model_fields = Model._meta.get_all_field_names()
+        gfk_fk_fields = {field.fk_field: field.ct_field
+                         for field in Model._meta.virtual_fields
+                         if isinstance(field, GenericForeignKey)}
+        deferred = {}
 
         # Handle each field
         for (field_name, field_value) in six.iteritems(d["fields"]):
@@ -135,9 +155,21 @@ def Deserializer(object_list, **options):
                 else:
                     data[field.attname] = None
 
+            # Defer GenericForeignKey to ensure ContentTypes were deserialized
+            elif (field_name in gfk_fk_fields and hasattr(field_value, '__iter__') and
+                      not isinstance(field_value, six.text_type)):
+                data[field_name] = field_value
+                deferred[field_name] = gfk_fk_fields[field_name]
+
             # Handle all other fields
             else:
                 data[field.name] = field.to_python(field_value)
+
+        for fk_field, ct_field in six.iteritems(deferred):
+            ct_obj = ContentType.objects.get_for_id(data[ct_field+'_id'])
+            rel_to = ct_obj.model_class()
+            natural_key = data.get(fk_field)
+            data[fk_field] = rel_to._default_manager.get_by_natural_key(*natural_key).pk
 
         yield base.DeserializedObject(Model(**data), m2m_data)
 
