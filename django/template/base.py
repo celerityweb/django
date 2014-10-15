@@ -790,16 +790,7 @@ class Variable(object):
                         except TypeError: # arguments *were* required
                             # GOTCHA: This will also catch any TypeError
                             # raised in the function itself.
-                            if hasattr(current, '__call__'):
-                                argspec = getargspec(current)
-                                if (argspec.args and
-                                        (not argspec.defaults or
-                                         len(argspec.args) != len(argspec.defaults))):
-                                    current = settings.TEMPLATE_STRING_IF_INVALID  # invalid method call
-                                else:
-                                    raise
-                            else:
-                                current = settings.TEMPLATE_STRING_IF_INVALID
+                            current = settings.TEMPLATE_STRING_IF_INVALID  # invalid method call
         except Exception as e:
             if getattr(e, 'silent_variable_failure', False):
                 current = settings.TEMPLATE_STRING_IF_INVALID
